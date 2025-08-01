@@ -11,31 +11,46 @@ class Multiplexer {
  private:
   static const int NO_CHANNEL_ENABLED = -1;
   std::vector<int> pins;
+  WaveGenerator waveGenerator;
+
+  int enabledChannelIndex;
+
+  // Timing and frequency control logic now resides in this class
+  int channelDurationMs;
+  int currentFrequencyIndex;
+  unsigned long lastChannelChangeTime;
 
   /**
-   * @brief Index of the currently enabled channel (0-based).
-   * -1 means no channel is enabled.
+   * @brief Checks if enough time has passed to switch to the next channel.
+   * @return true if the duration has elapsed, false otherwise.
    */
-  int enabledChannelIndex;
-  WaveGenerator waveGenerator;
+  bool enoughChannelTimePassed() const;
 
  public:
   /**
    * @brief Construct a new Multiplexer object.
-   * @param pins An initializer list of GPIO pin numbers to be used for the
-   * channels.
+   * @param pins An initializer list of GPIO pin numbers for the channels.
+   * @param frequenciesHz A list of frequencies for the wave generator.
+   * @param channelDurationMs The duration each channel will be active for a
+   * given frequency.
    */
   Multiplexer(
       std::initializer_list<int> pins,
       std::initializer_list<int> frequenciesHz,
-      int waveDurationMs
+      int channelDurationMs
   );
 
   /**
-   * @brief Initializes the GPIO pins for the multiplexer channels.
-   * Sets all channel pins to OUTPUT and drives them LOW.
+   * @brief Initializes GPIO pins, the wave generator, and state variables.
    */
   void init();
+
+  /**
+   * @brief Core update function to be called in the main loop.
+   * Handles the logic of cycling through frequencies and, for each frequency,
+   * cycling through all multiplexer channels.
+   */
+  void update();
 
   /**
    * @brief Enables a specific channel, disabling any previously enabled one.
@@ -54,9 +69,7 @@ class Multiplexer {
    * @param channel The channel number to check (1-based index).
    * @return true if the channel is valid, false otherwise.
    */
-  bool channelIsValid(
-      int channel
-  ) const;  // Marked as const as it doesn't modify state
+  bool channelIsValid(int channel) const;
 
   /**
    * @brief Checks if the currently enabled channel is the specified one.
@@ -70,9 +83,6 @@ class Multiplexer {
    * @return true if no channel is enabled, false otherwise.
    */
   bool noChannelEnabled() const;
-
-  void enableNextChannel();
-  void update();
 };
 
 #endif  // MULTIPLEXER_H
