@@ -9,7 +9,7 @@ void LTC2310::init() {
 }
 
 uint16_t LTC2310::readValue() {
-  spi.beginTransaction(SPISettings(20000000, MSBFIRST, SPI_MODE0));
+  spi.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
   digitalWrite(csPin, LOW);
   uint16_t value = spi.transfer16(0x0000);
   digitalWrite(csPin, HIGH);
