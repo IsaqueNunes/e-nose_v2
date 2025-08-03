@@ -6,23 +6,19 @@
 #include <Multiplexer.h>
 #include <WaveGenerator.h>
 
-#include "SensorData.h"
+#include <algorithm>  // For std::sort
+#include <vector>
 
 /**
- * @brief Manages the overall operation of the e-nose, coordinating the wave
- * generator, multiplexer, and ADC.
+ * @brief Manages the high-speed data acquisition and processing from the ADC.
  */
 class ENoseController {
  public:
   /**
    * @brief Construct a new ENoseController object.
-   *
    * @param waveGenerator Reference to the WaveGenerator instance.
    * @param multiplexer Reference to the Multiplexer instance.
    * @param adc Reference to the LTC2310 ADC instance.
-   * @param dataQueue Handle to the FreeRTOS queue for sending ADC data.
-   * @param channelDurationMs Duration each multiplexer channel remains active
-   * for a given frequency.
    * @param waveSettlingTimeUs Time to wait for the wave to settle after a
    * frequency change.
    */
@@ -30,8 +26,6 @@ class ENoseController {
       WaveGenerator& waveGenerator,
       Multiplexer& multiplexer,
       LTC2310& adc,
-      QueueHandle_t dataQueue,
-      int channelDurationMs,
       int waveSettlingTimeUs
   );
 
@@ -41,32 +35,23 @@ class ENoseController {
   void init();
 
   /**
-   * @brief The main update loop for the controller.
-   * This should be called repeatedly in its own FreeRTOS task.
+   * @brief Performs a high-speed sampling run for a given frequency and
+   * channel, and returns the calculated RMS value.
+   * @param frequencyIndex The index of the frequency to use for the
+   * measurement.
+   * @param channel The multiplexer channel to use (1-based index).
+   * @return The calculated RMS value in ADC units.
    */
-  void update();
+  float measureRms(int frequencyIndex, int channel);
 
  private:
   WaveGenerator& waveGenerator;
   Multiplexer& multiplexer;
   LTC2310& adc;
-  QueueHandle_t dataQueue;
-
-  int channelDurationMs;
   int waveSettlingTimeUs;
-  int currentFrequencyIndex;
-  int currentChannel;
-  unsigned long lastChannelChangeTime;
 
-  /**
-   * @brief Switches to the next frequency in the list.
-   */
-  void advanceToNextFrequency();
-
-  /**
-   * @brief Switches to the next channel in the multiplexer.
-   */
-  void advanceToNextChannel();
+  static const int NUM_SAMPLES = 256;
+  static const int TRIM_AMOUNT = 12;  // ~5% of NUM_SAMPLES
 };
 
 #endif  // E_NOSE_CONTROLLER_H

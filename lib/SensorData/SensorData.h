@@ -1,12 +1,15 @@
 #ifndef SENSORDATA_H
 #define SENSORDATA_H
 
-#include <Arduino.h>  // For QueueHandle_t
+/**
+ * @file SensorData.h
+ * @brief Defines the data structures for sensor readings and data packets.
+ */
 
-// Enum to identify the type of data in the queue
-enum DataType { SENSORS_DATA, ADC_DATA };
-
-// Struct for BME680 sensor data
+/**
+ * @struct BME680_Data
+ * @brief Holds the data read from the BME680 sensor.
+ */
 struct BME680_Data {
   float temperature;
   float humidity;
@@ -14,33 +17,42 @@ struct BME680_Data {
   float gas_resistance;
 };
 
-// Struct for SHT31 sensor data
+/**
+ * @struct SHT31_Data
+ * @brief Holds the data read from the SHT31 sensor.
+ */
 struct SHT31_Data {
   float temperature;
   float humidity;
 };
 
-// Struct for ADC data
-struct ADC_Data {
-  uint16_t value;
-  int channel;
-  long frequency;
-};
-
-// Struct to be sent over the queue
+/**
+ * @struct DataPacket
+ * @brief A comprehensive packet containing all sensor data for a single
+ * measurement point. This is the structure that is sent through the FreeRTOS
+ * queue.
+ */
 struct DataPacket {
-  DataType type;
-  union {
-    struct {
-      BME680_Data bmeData;
-      SHT31_Data sht31Data;
-      uint16_t mq3_value;
-      uint16_t mq135_value;
-      uint16_t mq136_value;
-      uint16_t mq137_value;
-    } sensorData;
-    ADC_Data adcData;
-  };
+  // BME680 Data
+  float bme_temperature;
+  float bme_humidity;
+  float bme_pressure;
+  float bme_gas_resistance;
+
+  // SHT31 Data
+  float sht_temperature;
+  float sht_humidity;
+
+  // MQ Sensor Data (Analog)
+  uint16_t mq3_value;
+  uint16_t mq135_value;
+  uint16_t mq136_value;
+  uint16_t mq137_value;
+
+  // Processed ADC Data
+  float adc_rms;
+  int adc_channel;
+  long adc_frequency;
 };
 
 #endif  // SENSORDATA_H
