@@ -28,9 +28,15 @@ void WaveGenerator::setFrequencyByIndex(int index) {
                                              ? MD_AD9833::CHAN_1
                                              : MD_AD9833::CHAN_0;
   ad9833.setFrequency(inactiveChannel, frequency);
+  Serial.printf(
+      "WAVE GENERATOR: Setting frequency %ld Hz on channel %d.\n",
+      frequency,
+      inactiveChannel
+  );
 
   // Switch to the new frequency
   ad9833.setActiveFrequency(inactiveChannel);
+  Serial.printf("WAVE GENERATOR: Switched to channel %d.\n", inactiveChannel);
   activeChannel = inactiveChannel;
 }
 

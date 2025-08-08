@@ -3,7 +3,7 @@
 BME680_Sensor::BME680_Sensor() { }
 
 bool BME680_Sensor::init() {
-  if (!bme.begin()) {
+  if (!bme.begin(0x76)) {
     Serial.println("Could not find a valid BME680 sensor, check wiring!");
     return false;
   }

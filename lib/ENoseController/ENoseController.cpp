@@ -27,6 +27,9 @@ float ENoseController::measureRms(int frequencyIndex, int channel) {
   uint16_t samples[NUM_SAMPLES];
   for (int i = 0; i < NUM_SAMPLES; ++i) {
     samples[i] = adc.readValue();
+    Serial.printf(
+        "Sample %d: %u\n", i, samples[i]
+    );  // Debugging output for each sample
     // A small delay might be needed if SPI is too fast, but usually readValue
     // is blocking enough
   }
