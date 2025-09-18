@@ -8,7 +8,8 @@ WaveGenerator::WaveGenerator(
 )
     : frequenciesHz(frequenciesHz),
       ad9833(dataPin, clockPin, frameSyncPin),
-      activeChannel(MD_AD9833::CHAN_0) { }
+      activeChannel(MD_AD9833::CHAN_0)  // Começa com o canal 0
+{ }
 
 void WaveGenerator::init() {
   ad9833.begin();
@@ -23,20 +24,22 @@ void WaveGenerator::setFrequencyByIndex(int index) {
 
   long frequency = frequenciesHz[index];
 
-  // Use the inactive channel to set the new frequency
+  // Determina qual canal está inativo para programar a nova frequência
   MD_AD9833::channel_t inactiveChannel = (activeChannel == MD_AD9833::CHAN_0)
                                              ? MD_AD9833::CHAN_1
                                              : MD_AD9833::CHAN_0;
-  ad9833.setFrequency(inactiveChannel, frequency);
+
   Serial.printf(
-      "WAVE GENERATOR: Setting frequency %ld Hz on channel %d.\n",
-      frequency,
-      inactiveChannel
+      "Setting Freq %ld Hz on inactive channel %d\n", frequency, inactiveChannel
   );
 
-  // Switch to the new frequency
+  // Define a frequência no canal que não está a ser usado
+  ad9833.setFrequency(inactiveChannel, frequency);
+
+  // Ativa o canal recém-programado (a comutação é instantânea)
   ad9833.setActiveFrequency(inactiveChannel);
-  Serial.printf("WAVE GENERATOR: Switched to channel %d.\n", inactiveChannel);
+
+  // Atualiza o estado para a próxima chamada
   activeChannel = inactiveChannel;
 }
 

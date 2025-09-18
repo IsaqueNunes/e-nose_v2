@@ -18,7 +18,8 @@ CHARACTERISTIC_UUID = "b13493c7-5499-4b0a-a3d9-66eea53f382c"
 # i = int (4 bytes)
 # l = long (4 bytes)
 # 6x floats, 4x uint16_t, 1x float, 1x int, 1x long
-DATA_FORMAT_STRING = '<ffffffHHHHfil'
+# DATA_FORMAT_STRING = '<ffffffHHHHfil'
+DATA_FORMAT_STRING = '<fffffffffffil'
 
 # --- Nomes das Colunas para o DataFrame/CSV ---
 COLUMN_NAMES = [
@@ -58,7 +59,7 @@ def notification_handler(sender, data: bytearray):
 async def main(args):
     """
     Função principal assíncrona.
-    Procura pelo dispositivo, conecta, ativa notificações e espera.
+    Procura pelo dispositivo, conecta, ativa notificações e gerencia reconexões.
     """
     global output_csv_path
     output_csv_path = args.output
@@ -70,36 +71,89 @@ async def main(args):
     else:
         print(f"Appending to existing CSV file: {output_csv_path}")
 
-    print(f"Scanning for device: '{DEVICE_NAME}'...")
-    device = await BleakScanner.find_device_by_name(DEVICE_NAME, timeout=20.0)
+    # Callback para ser notificado sobre desconexões
+    def handle_disconnect(client: BleakClient):
+        print(f"Device {client.address} disconnected. Attempting to reconnect...")
+        # A lógica de reconexão está no loop principal abaixo.
+        # Este callback é apenas para notificação.
 
-    if not device:
-        print(f"Could not find device with name '{DEVICE_NAME}'. Please check if it's on and advertising.")
-        return
+    # Loop principal para garantir que o script tente se reconectar sempre
+    while True:
+        device = None
+        try:
+            print(f"Scanning for device: '{DEVICE_NAME}'...")
+            device = await BleakScanner.find_device_by_name(DEVICE_NAME, timeout=10.0)
 
-    print(f"Connecting to {device.name} ({device.address})...")
+            if not device:
+                print(f"Could not find device '{DEVICE_NAME}'. Retrying in 5 seconds...")
+                await asyncio.sleep(5)
+                continue # Volta para o início do loop e tenta escanear novamente
 
-    async with BleakClient(device) as client:
-        if client.is_connected:
-            print(f"Connected successfully!")
-            try:
-                await client.start_notify(CHARACTERISTIC_UUID, notification_handler)
-                print("Notifications started. Waiting for data... (Press Ctrl+C to stop)")
-                # Mantém o script rodando para receber notificações
-                while True:
-                    await asyncio.sleep(1)
-            except Exception as e:
-                print(f"An error occurred: {e}")
-            finally:
-                # Garante que as notificações sejam paradas ao sair
-                await client.stop_notify(CHARACTERISTIC_UUID)
-                print("Notifications stopped.")
-        else:
-            print("Failed to connect.")
+            print(f"Found device: {device.name} ({device.address}). Connecting...")
+
+            # O 'async with' gerencia a conexão e desconexão de forma limpa
+            async with BleakClient(device, disconnected_callback=handle_disconnect) as client:
+                if client.is_connected:
+                    print("Connected successfully!")
+                    await client.start_notify(CHARACTERISTIC_UUID, notification_handler)
+                    print("Notifications started. Waiting for data... (Press Ctrl+C to stop)")
+
+                    # Mantém a conexão ativa enquanto o dispositivo estiver conectado
+                    while client.is_connected:
+                        await asyncio.sleep(1) # Verifica a cada segundo
+
+        except Exception as e:
+            print(f"An error occurred: {e}. Cleaning up and retrying in 5 seconds...")
+            # Não é preciso fazer nada com o 'client', o 'async with' já cuida disso.
+
+        # Se saiu do try/except (por erro ou desconexão), espera um pouco antes de tentar de novo
+        await asyncio.sleep(5)
+
+# async def main(args):
+#     """
+#     Função principal assíncrona.
+#     Procura pelo dispositivo, conecta, ativa notificações e espera.
+#     """
+#     global output_csv_path
+#     output_csv_path = args.output
+
+#     # Cria o arquivo CSV e escreve o cabeçalho se ele não existir
+#     if not os.path.exists(output_csv_path):
+#         pd.DataFrame(columns=COLUMN_NAMES).to_csv(output_csv_path, index=False)
+#         print(f"Created new CSV file: {output_csv_path}")
+#     else:
+#         print(f"Appending to existing CSV file: {output_csv_path}")
+
+#     print(f"Scanning for device: '{DEVICE_NAME}'...")
+#     device = await BleakScanner.find_device_by_name(DEVICE_NAME, timeout=20.0)
+
+#     if not device:
+#         print(f"Could not find device with name '{DEVICE_NAME}'. Please check if it's on and advertising.")
+#         return
+
+#     print(f"Connecting to {device.name} ({device.address})...")
+
+#     async with BleakClient(device) as client:
+#         if client.is_connected:
+#             print(f"Connected successfully!")
+#             try:
+#                 await client.start_notify(CHARACTERISTIC_UUID, notification_handler)
+#                 print("Notifications started. Waiting for data... (Press Ctrl+C to stop)")
+#                 # Mantém o script rodando para receber notificações
+#                 while True:
+#                     await asyncio.sleep(1)
+#             except Exception as e:
+#                 print(f"An error occurred: {e}")
+#             finally:
+#                 # Garante que as notificações sejam paradas ao sair
+#                 await client.stop_notify(CHARACTERISTIC_UUID)
+#                 print("Notifications stopped.")
+#         else:
+#             print("Failed to connect.")
 
 """
 python /home/isaque/Programming/e-nose_v2/src/e-nose_client.py \
-    -o /home/isaque/Programming/e-nose_v2/data/e-nose_data_2.csv
+    -o /home/isaque/Programming/e-nose_v2/data/e-nose_data_3.csv
 """
 
 if __name__ == "__main__":

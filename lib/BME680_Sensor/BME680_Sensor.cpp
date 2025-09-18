@@ -22,6 +22,7 @@ bool BME680_Sensor::readSensor(BME680_Data &data) {
     Serial.println("Failed to perform reading :(");
     return false;
   }
+
   data.temperature = bme.temperature;
   data.pressure = bme.pressure / 100.0;
   data.humidity = bme.humidity;

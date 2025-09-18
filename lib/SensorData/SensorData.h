@@ -44,10 +44,14 @@ struct DataPacket {
   float sht_humidity;
 
   // MQ Sensor Data (Analog)
-  uint16_t mq3_value;
-  uint16_t mq135_value;
-  uint16_t mq136_value;
-  uint16_t mq137_value;
+  // uint16_t mq3_value;
+  // uint16_t mq135_value;
+  // uint16_t mq136_value;
+  // uint16_t mq137_value;
+  float mq3_value;
+  float mq135_value;
+  float mq136_value;
+  float mq137_value;
 
   // Processed ADC Data
   float adc_rms;
