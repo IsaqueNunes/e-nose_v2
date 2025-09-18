@@ -30,7 +30,7 @@ const int CHANNEL_DURATION_S = 15;
 const int NUM_RMS_MEASUREMENTS_PER_CHANNEL =
     CHANNEL_DURATION_S / RMS_MEASUREMENT_DURATION_S;
 
-const std::initializer_list<long> FREQUENCIES_HZ = {1000};
+const std::initializer_list<long> FREQUENCIES_HZ = {1000, 5000, 10000, 20000};
 const int NUM_MUX_CHANNELS = 4;
 
 // Data Queue
@@ -44,7 +44,7 @@ SPIClass hspi(HSPI);
 WaveGenerator waveGenerator(
     FREQUENCIES_HZ, WAVEGEN_DATA_PIN, WAVEGEN_CLOCK_PIN, WAVEGEN_FSYNC_PIN
 );
-Multiplexer multiplexer({13});
+Multiplexer multiplexer({27, 25, 26, 13});
 // Passa a instância HSPI dedicada para o construtor do ADC
 LTC2310 adc(LTC2310_CS_PIN, hspi);
 BME680_Sensor bmeSensor;
