@@ -6,26 +6,50 @@ from bleak import BleakClient, BleakScanner
 import struct
 import os
 
-DEVICE_NAME = "E-Nose"
+# --- Configurações do Dispositivo e Serviço ---
+# ATUALIZADO: O nome do dispositivo foi alterado no ESP32
+DEVICE_NAME = "E-Nose_V2_LockIn"
 SERVICE_UUID = "bea5692f-939d-4e5a-bfa9-80d3efb8e3cb"
 CHARACTERISTIC_UUID = "b13493c7-5499-4b0a-a3d9-66eea53f382c"
 
-# --- Estrutura de Desempacotamento ---
-# Isso define como os 44 bytes recebidos serão interpretados.
-# '<' indica little-endian (padrão do ESP32)
-# f = float (4 bytes)
-# H = unsigned short (2 bytes)
-# i = int (4 bytes)
-# l = long (4 bytes)
-# 6x floats, 4x uint16_t, 1x float, 1x int, 1x long
-# DATA_FORMAT_STRING = '<ffffffHHHHfil'
-DATA_FORMAT_STRING = '<fffffffffffil'
+# --- Configuração da Estrutura de Dados (DEVE CORRESPONDER AO ESP32) ---
+NUM_FREQUENCIAS = 6
+NUM_CANAIS = 4
+ADC_DATA_POINTS = NUM_FREQUENCIAS * NUM_CANAIS
 
-# --- Nomes das Colunas para o DataFrame/CSV ---
+# ATUALIZADO: A nova estrutura de dados consiste em:
+# 10 floats (sensores comerciais) + 16 floats (adc_mean) + 16 floats (adc_std_dev) = 42 floats
+NUM_FLOATS = 10 + (2 * ADC_DATA_POINTS)
+DATA_FORMAT_STRING = f'<{NUM_FLOATS}f'
+EXPECTED_DATA_SIZE = struct.calcsize(DATA_FORMAT_STRING) # Calcula o tamanho esperado em bytes
+
+# --- Geração dos Nomes das Colunas para o CSV ---
+# Frequências usadas no ESP32 para nomear as colunas corretamente
+FREQUENCIES_HZ = [100, 1000, 5000, 10000, 50000, 100000]
+
+# Colunas fixas
 COLUMN_NAMES = [
-    'Timestamp', 'BME_Temp', 'BME_Hum', 'BME_Pres', 'BME_Gas', 'SHT_Temp', 'SHT_Hum',
-    'MQ3', 'MQ135', 'MQ136', 'MQ137', 'ADC_RMS', 'ADC_Channel', 'ADC_Frequency'
+    'Timestamp', 'BME_Temp', 'BME_Hum', 'BME_Pres', 'BME_Gas',
+    'SHT_Temp', 'SHT_Hum', 'MQ3', 'MQ135', 'MQ136', 'MQ137'
 ]
+
+# Adiciona dinamicamente as colunas do sensor fabricado
+adc_columns = []
+for i in range(NUM_FREQUENCIAS):
+    for j in range(NUM_CANAIS):
+        freq = FREQUENCIES_HZ[i]
+        ch = j + 1
+        adc_columns.append(f'Ch{ch}_F{freq}Hz_Mean')
+        adc_columns.append(f'Ch{ch}_F{freq}Hz_StdDev')
+
+# Combina as colunas de Média e Desvio Padrão
+# O desempacotamento retornará todos os 'mean' primeiro, depois todos os 'std_dev'
+mean_columns = [col for col in adc_columns if 'Mean' in col]
+std_dev_columns = [col for col in adc_columns if 'StdDev' in col]
+
+# Junta tudo na ordem correta
+COLUMN_NAMES.extend(mean_columns + std_dev_columns)
+
 
 def notification_handler(sender, data: bytearray):
     """
@@ -33,6 +57,11 @@ def notification_handler(sender, data: bytearray):
     Desempacota os dados, cria uma linha no DataFrame e anexa ao CSV.
     """
     global output_csv_path
+
+    # Verifica se o tamanho dos dados recebidos corresponde ao esperado
+    if len(data) != EXPECTED_DATA_SIZE:
+        print(f"Error: Received {len(data)} bytes, but expected {EXPECTED_DATA_SIZE}. Skipping packet.")
+        return
 
     try:
         # 1. Desempacota os bytes recebidos usando a string de formato
@@ -45,16 +74,18 @@ def notification_handler(sender, data: bytearray):
         # 3. Cria um DataFrame de uma única linha com os dados
         df_new_row = pd.DataFrame([full_data_row], columns=COLUMN_NAMES)
 
-        print(f"Received data: ADC_RMS={unpacked_data[10]:.2f}, Freq={unpacked_data[12]}")
+        # Exibe um resumo dos dados recebidos para feedback
+        first_adc_mean = unpacked_data[10] # O primeiro valor de 'adc_mean'
+        print(f"Received data packet at {timestamp}. First ADC Mean: {first_adc_mean:.4f}")
 
         # 4. Anexa ao arquivo CSV
-        # 'a' para append, header=False para não reescrever o cabeçalho
         df_new_row.to_csv(output_csv_path, mode='a', header=False, index=False)
 
     except struct.error as e:
         print(f"Error unpacking data: {e}. Received {len(data)} bytes.")
     except Exception as e:
         print(f"An error occurred in notification_handler: {e}")
+
 
 async def main(args):
     """
@@ -64,20 +95,15 @@ async def main(args):
     global output_csv_path
     output_csv_path = args.output
 
-    # Cria o arquivo CSV e escreve o cabeçalho se ele não existir
     if not os.path.exists(output_csv_path):
         pd.DataFrame(columns=COLUMN_NAMES).to_csv(output_csv_path, index=False)
         print(f"Created new CSV file: {output_csv_path}")
     else:
         print(f"Appending to existing CSV file: {output_csv_path}")
 
-    # Callback para ser notificado sobre desconexões
     def handle_disconnect(client: BleakClient):
         print(f"Device {client.address} disconnected. Attempting to reconnect...")
-        # A lógica de reconexão está no loop principal abaixo.
-        # Este callback é apenas para notificação.
 
-    # Loop principal para garantir que o script tente se reconectar sempre
     while True:
         device = None
         try:
@@ -87,89 +113,34 @@ async def main(args):
             if not device:
                 print(f"Could not find device '{DEVICE_NAME}'. Retrying in 5 seconds...")
                 await asyncio.sleep(5)
-                continue # Volta para o início do loop e tenta escanear novamente
+                continue
 
             print(f"Found device: {device.name} ({device.address}). Connecting...")
 
-            # O 'async with' gerencia a conexão e desconexão de forma limpa
             async with BleakClient(device, disconnected_callback=handle_disconnect) as client:
                 if client.is_connected:
                     print("Connected successfully!")
                     await client.start_notify(CHARACTERISTIC_UUID, notification_handler)
                     print("Notifications started. Waiting for data... (Press Ctrl+C to stop)")
 
-                    # Mantém a conexão ativa enquanto o dispositivo estiver conectado
                     while client.is_connected:
-                        await asyncio.sleep(1) # Verifica a cada segundo
+                        await asyncio.sleep(1)
 
         except Exception as e:
             print(f"An error occurred: {e}. Cleaning up and retrying in 5 seconds...")
-            # Não é preciso fazer nada com o 'client', o 'async with' já cuida disso.
 
-        # Se saiu do try/except (por erro ou desconexão), espera um pouco antes de tentar de novo
         await asyncio.sleep(5)
 
-# async def main(args):
-#     """
-#     Função principal assíncrona.
-#     Procura pelo dispositivo, conecta, ativa notificações e espera.
-#     """
-#     global output_csv_path
-#     output_csv_path = args.output
-
-#     # Cria o arquivo CSV e escreve o cabeçalho se ele não existir
-#     if not os.path.exists(output_csv_path):
-#         pd.DataFrame(columns=COLUMN_NAMES).to_csv(output_csv_path, index=False)
-#         print(f"Created new CSV file: {output_csv_path}")
-#     else:
-#         print(f"Appending to existing CSV file: {output_csv_path}")
-
-#     print(f"Scanning for device: '{DEVICE_NAME}'...")
-#     device = await BleakScanner.find_device_by_name(DEVICE_NAME, timeout=20.0)
-
-#     if not device:
-#         print(f"Could not find device with name '{DEVICE_NAME}'. Please check if it's on and advertising.")
-#         return
-
-#     print(f"Connecting to {device.name} ({device.address})...")
-
-#     async with BleakClient(device) as client:
-#         if client.is_connected:
-#             print(f"Connected successfully!")
-#             try:
-#                 await client.start_notify(CHARACTERISTIC_UUID, notification_handler)
-#                 print("Notifications started. Waiting for data... (Press Ctrl+C to stop)")
-#                 # Mantém o script rodando para receber notificações
-#                 while True:
-#                     await asyncio.sleep(1)
-#             except Exception as e:
-#                 print(f"An error occurred: {e}")
-#             finally:
-#                 # Garante que as notificações sejam paradas ao sair
-#                 await client.stop_notify(CHARACTERISTIC_UUID)
-#                 print("Notifications stopped.")
-#         else:
-#             print("Failed to connect.")
-
-"""
-python /home/isaque/Programming/e-nose_v2/src/e-nose_client.py \
-    -o /home/isaque/Programming/e-nose_v2/data/e-nose_data_3.csv
-"""
 
 if __name__ == "__main__":
-    # Configura o parser de argumentos da linha de comando
-    parser = argparse.ArgumentParser(description="BLE Data Collector for E-Nose project.")
-
-    # Gera um nome de arquivo padrão com a data e hora atuais
-    default_filename = f"e-nose_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-
+    parser = argparse.ArgumentParser(description="BLE Data Collector for E-Nose project (Lock-In Version).")
+    default_filename = f"e-nose_lockin_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     parser.add_argument(
         "-o", "--output",
         type=str,
         default=default_filename,
         help=f"Output CSV file name. Default: {default_filename}"
     )
-
     args = parser.parse_args()
 
     try:

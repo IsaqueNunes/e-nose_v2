@@ -5,7 +5,6 @@
 #include <MD_AD9833.h>
 #include <SPI.h>
 
-#include <initializer_list>
 #include <vector>
 
 /**
@@ -16,13 +15,13 @@ class WaveGenerator {
   /**
    * @brief Constructor for WaveGenerator.
    *
-   * @param frequenciesHz A list of frequencies for wave generation.
+   * @param frequenciesHz A vector of frequencies for wave generation.
    * @param dataPin MOSI pin for SPI communication.
    * @param clockPin SCK pin for SPI communication.
    * @param frameSyncPin FSYNC pin for AD9833.
    */
   WaveGenerator(
-      std::initializer_list<long> frequenciesHz,
+      const std::vector<long>& frequenciesHz,
       int dataPin = 23,
       int clockPin = 18,
       int frameSyncPin = 5
@@ -32,6 +31,13 @@ class WaveGenerator {
    * @brief Initializes the AD9833.
    */
   void init();
+
+  /**
+   * @brief Sets the output frequency based on a direct frequency value.
+   * This method uses both frequency registers for a fast and smooth transition.
+   * @param frequency The frequency in Hz to set.
+   */
+  void setFrequency(long frequency);
 
   /**
    * @brief Sets the output frequency based on an index from the initial list.

@@ -1,7 +1,8 @@
 #include "WaveGenerator.h"
 
+// ATUALIZADO: Construtor agora aceita um std::vector
 WaveGenerator::WaveGenerator(
-    std::initializer_list<long> frequenciesHz,
+    const std::vector<long>& frequenciesHz,
     int dataPin,
     int clockPin,
     int frameSyncPin
@@ -16,22 +17,12 @@ void WaveGenerator::init() {
   ad9833.setMode(MD_AD9833::MODE_SINE);
 }
 
-void WaveGenerator::setFrequencyByIndex(int index) {
-  if (!frequencyIndexIsValid(index)) {
-    Serial.printf("ERROR: Invalid frequency index %d.\n", index);
-    return;
-  }
-
-  long frequency = frequenciesHz[index];
-
+// NOVO: Implementação do método setFrequency que faltava
+void WaveGenerator::setFrequency(long frequency) {
   // Determina qual canal está inativo para programar a nova frequência
   MD_AD9833::channel_t inactiveChannel = (activeChannel == MD_AD9833::CHAN_0)
                                              ? MD_AD9833::CHAN_1
                                              : MD_AD9833::CHAN_0;
-
-  Serial.printf(
-      "Setting Freq %ld Hz on inactive channel %d\n", frequency, inactiveChannel
-  );
 
   // Define a frequência no canal que não está a ser usado
   ad9833.setFrequency(inactiveChannel, frequency);
@@ -41,6 +32,17 @@ void WaveGenerator::setFrequencyByIndex(int index) {
 
   // Atualiza o estado para a próxima chamada
   activeChannel = inactiveChannel;
+}
+
+void WaveGenerator::setFrequencyByIndex(int index) {
+  if (!frequencyIndexIsValid(index)) {
+    Serial.printf("ERROR: Invalid frequency index %d.\n", index);
+    return;
+  }
+
+  long frequency = frequenciesHz[index];
+  // Reutiliza a lógica principal para evitar duplicação de código
+  setFrequency(frequency);
 }
 
 size_t WaveGenerator::getFrequencyCount() const { return frequenciesHz.size(); }
